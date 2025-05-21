@@ -71,9 +71,14 @@
     }
 
     function handleOrientation(event) {
-      let alpha = event.alpha;
-      if (typeof alpha === 'number') {
-        updateCompass(alpha);
+      let heading;
+      if (event.webkitCompassHeading !== undefined) {
+        heading = event.webkitCompassHeading;
+      } else if (event.alpha !== undefined) {
+        heading = 360 - event.alpha;
+      }
+      if (typeof heading === 'number') {
+        updateCompass(heading);
       }
     }
 

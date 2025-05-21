@@ -2,26 +2,27 @@
 <html lang="zh">
 <head>
   <meta charset="UTF-8">
+  <title>网页指南针 - 兼容 iOS</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>网页指南针</title>
   <style>
-    body { text-align: center; font-family: Arial; }
+    body { text-align: center; font-family: Arial; background: #f7fafc; }
+    h1 { color: #2196f3; margin-top: 32px; }
     #compass {
-      margin: 60px auto;
+      margin: 48px auto 24px;
       width: 220px;
       height: 220px;
       border: 8px solid #2196f3;
       border-radius: 50%;
       position: relative;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.12);
-      background: #f8fafc;
+      background: #fff;
+      box-shadow: 0 4px 20px rgba(33,150,243,0.10);
       display: flex; align-items: center; justify-content: center;
     }
     #needle {
       width: 6px;
       height: 90px;
-      background: red;
-      border-radius: 4px;
+      background: #e53935;
+      border-radius: 3px;
       position: absolute;
       left: 50%; top: 50%;
       transform: translate(-50%, -90%) rotate(0deg);
@@ -31,7 +32,7 @@
     }
     #compass span {
       position: absolute;
-      font-size: 20px;
+      font-size: 22px;
       color: #333;
     }
     #north { top: 18px; left: 50%; transform: translate(-50%, 0); font-weight: bold; color: #e53935;}
@@ -39,15 +40,13 @@
     #south { bottom: 18px; left: 50%; transform: translate(-50%, 0);}
     #west  { left: 18px; top: 50%; transform: translate(0, -50%);}
     #degree {
-      margin-top: 32px;
-      font-size: 32px;
+      margin-top: 24px;
+      font-size: 36px;
       color: #2196f3;
       font-weight: bold;
       letter-spacing: 2px;
     }
-    #msg {
-      margin-top: 30px; color: #888;
-    }
+    #msg { margin-top: 22px; color: #888; min-height: 30px;}
   </style>
 </head>
 <body>
@@ -60,55 +59,71 @@
     <span id="west">W</span>
   </div>
   <div id="degree">0°</div>
-  <div id="msg"></div>
+  <div id="msg">正在检测设备支持情况...</div>
   <script>
-    let needle = document.getElementById('needle');
-    let degree = document.getElementById('degree');
-    let msg = document.getElementById('msg');
+    const needle = document.getElementById('needle');
+    const degree = document.getElementById('degree');
+    const msg = document.getElementById('msg');
+
     function updateCompass(angle) {
+      // 让红针始终指向北（0度方向）
       needle.style.transform = `translate(-50%, -90%) rotate(${-angle}deg)`;
       degree.textContent = `${Math.round(angle)}°`;
     }
 
     function handleOrientation(event) {
-      let heading;
-      if (event.webkitCompassHeading !== undefined) {
-        heading = event.webkitCompassHeading;
-      } else if (event.alpha !== undefined) {
-        heading = 360 - event.alpha;
+      let angle = 0, method = '';
+      // iOS Safari（iPhone）专有，地理北
+      if (typeof event.webkitCompassHeading === 'number') {
+        angle = event.webkitCompassHeading;
+        method = 'webkitCompassHeading';
+      } else if (typeof event.alpha === 'number') {
+        // 其它浏览器（大部分安卓）
+        angle = 360 - event.alpha; // alpha: 顺时针, 0朝北
+        method = 'alpha';
+      } else {
+        msg.textContent = "未能获取方向数据，请尝试刷新页面或换浏览器。";
+        return;
       }
-      if (typeof heading === 'number') {
-        updateCompass(heading);
+      // 保证0~360
+      angle = (angle + 360) % 360;
+      updateCompass(angle);
+
+      // 仅首次提示一次
+      if (method === 'webkitCompassHeading') {
+        msg.textContent = "已获取地理北方数据（iOS专用），红针指向北方。";
+      } else if (method === 'alpha') {
+        msg.textContent = "已获取方向数据，红针大致指向北方。";
       }
     }
 
-    function showMessage(text) {
-      msg.textContent = text;
-    }
-
-    if (window.DeviceOrientationEvent) {
-      // iOS 13+需要用户授权
-      if (typeof DeviceOrientationEvent.requestPermission === 'function') {
-        showMessage('请点击以授权访问陀螺仪');
-        document.body.addEventListener('click', () => {
+    function initCompass() {
+      // iOS 13+ 需要手动授权
+      if (window.DeviceOrientationEvent && typeof DeviceOrientationEvent.requestPermission === 'function') {
+        msg.textContent = "需授权访问方向传感器，请点此页面任意位置。";
+        document.body.addEventListener('click', function grant() {
           DeviceOrientationEvent.requestPermission().then(res => {
             if (res === 'granted') {
               window.addEventListener('deviceorientation', handleOrientation, true);
-              showMessage('已获取方向数据。请保持手机水平并朝向你想要的方向。');
+              msg.textContent = "已授权，正在获取方向...";
             } else {
-              showMessage('未授权访问方向数据。');
+              msg.textContent = "未授权，无法获取方向数据。";
             }
-          }).catch(() => showMessage('方向数据授权失败。'));
-        }, {once: true});
-      } else {
-        // 安卓/旧iOS 直接监听
+          }).catch(() => {
+            msg.textContent = "方向数据授权失败，请刷新后重试。";
+          });
+          document.body.removeEventListener('click', grant);
+        });
+      } else if (window.DeviceOrientationEvent) {
+        // 安卓及部分旧iOS
         window.addEventListener('deviceorientation', handleOrientation, true);
-        showMessage('请保持手机水平并朝向你想要的方向。');
+        msg.textContent = "请保持手机水平，红针将自动指向北方。";
+      } else {
+        msg.textContent = "此设备或浏览器不支持方向传感器。";
       }
-    } else {
-      showMessage('此设备不支持方向传感器。');
     }
+
+    initCompass();
   </script>
 </body>
 </html>
-
